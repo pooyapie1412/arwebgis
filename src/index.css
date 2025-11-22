@@ -18,7 +18,7 @@
   right: 0;
   margin-top: 45px;
   height: 15vh;
-  background: white;
+  /* background: white; */
   box-shadow: -2px 0 5px rgba(0,0,0,0.2);
   overflow-y: auto;
   z-index: 500;

@@ -1,9 +1,11 @@
 import { Viewer, Model, useCesium } from "resium";
 import { useEffect } from "react";
-import { Cartesian3, Math as CesiumMath, HeadingPitchRoll, Transforms } from "cesium";
+import { Cartesian3, Math as CesiumMath, HeadingPitchRoll, HeadingPitchRange, Transforms,HeightReference, ScreenSpaceEventType, ScreenSpaceEventHandler, Color, Cesium3DTileFeature  } from "cesium";
 import WebXRPolyfill from "webxr-polyfill";
 import { Ion } from "cesium";
 import { EllipsoidTerrainProvider } from "cesium";
+import modelUrl from '../assets/output_fixed.gltf';
+
 
 Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI3NGQ4MGQzYy00YmFjLTQ0MTQtYjdjNy0wZjU3NGJlM2ExNTciLCJpZCI6MzM1MDQ0LCJpYXQiOjE3NjE0ODgyMjh9.34QRLJ1yTWW2neUreWfN1RRqDoffO3Lkzafc5emXf2w";
 
@@ -78,26 +80,30 @@ const CesiumContent = () => {
     }, []);
 
   // موقعیت تهران
-  const position = Cartesian3.fromDegrees(54.461375, 36.839126, 50); // lon, lat, height
-  const hpr = new HeadingPitchRoll(
-    CesiumMath.toRadians(0),   // heading
-    CesiumMath.toRadians(0),   // pitch
-    CesiumMath.toRadians(0)    // roll
-  );
+  const centerLon =  49.57840487;  // از print Python جایگزین کن
+  const centerLat =  37.294837457;
+  const centerH = 1.81571149360388;  // میانگین h، از Python بگیر (برای جلوگیری از زیر زمین)
+  const position = Cartesian3.fromDegrees(centerLon, centerLat, centerH);
+  const hpr = new HeadingPitchRoll(CesiumMath.toRadians(90), CesiumMath.toRadians(90), CesiumMath.toRadians(0));
   const modelMatrix = Transforms.headingPitchRollToFixedFrame(position, hpr);
-
   const handleModelReady = (model) => {
+    console.log('model ready', model);
     if (!viewer || viewer.isDestroyed()) return;
-
     const boundingSphere = model.boundingSphere;
-    if (boundingSphere) {
+    if (boundingSphere && boundingSphere.radius > 10) {
       viewer.camera.flyToBoundingSphere(boundingSphere, {
         duration: 2.5,
-        offset: new HeadingPitchRoll(
-          CesiumMath.toRadians(0),
-          CesiumMath.toRadians(-30),
-          boundingSphere.radius * 2
-        ),
+        offset: new HeadingPitchRange(0, CesiumMath.toRadians(-45), boundingSphere.radius * 3),  // range بیشتر برای دید بهتر
+      });
+    } else {
+      viewer.camera.flyTo({
+        destination: Cartesian3.fromDegrees(centerLon, centerLat, 1000 + centerH),  // +centerH برای جلوگیری از clipping
+        orientation: {
+          heading: CesiumMath.toRadians(0),
+          pitch: CesiumMath.toRadians(-45),
+          roll: 0
+        },
+        duration: 2.5
       });
     }
 
@@ -131,13 +137,12 @@ const CesiumContent = () => {
 
   return (
     <Model
-      url="/assets/FeatureIdAttribute.gltf"
-      modelMatrix={modelMatrix} // مهم: مدل روی موقعیت تهران
-      scale={100.0}             // مقیاس بزرگتر چون مدل نرمال 0-1 است
-      minimumPixelSize={128}
-      show
-      onReady={handleModelReady}
-      onError={(e) => console.error("❌ Model error:", e)}
+        url={modelUrl}
+        modelMatrix={modelMatrix}
+        scale={1.0}
+        show={true}
+        onReady={handleModelReady}
+        onError={(e) => console.error("❌ Model error:", e)}
     />
   );
 };

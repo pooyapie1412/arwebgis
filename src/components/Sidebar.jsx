@@ -14,7 +14,7 @@ const Sidebar = () => {
 
 
   return (
-    <div className={`sidebar bg-gray-800 text-white  p-4 transition-all duration-300 ${open ? 'w-64' : 'w-16'} z-[1000]`}>
+    <div className={`sidebar hidden bg-gray-800 text-white  p-4 transition-all duration-300 ${open ? 'w-64' : 'w-16'} z-[1000]`}>
       <button
         className="bg-blue-600 text-white p-2 rounded mb-4 w-full hover:bg-blue-700 z-[1000]"
         onClick={() => setOpen(!open)}
@@ -33,6 +33,7 @@ const Sidebar = () => {
         </>
       )}
     </div>
+    
   );
 };
 
