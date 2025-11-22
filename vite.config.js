@@ -8,11 +8,4 @@ import { resolve } from 'path';
 export default defineConfig({
   plugins: [react(), cesium()],
   assetsInclude: ['**/*.gltf', '**/*.glb'],
-  server: {
-    https: {
-      key: readFileSync(resolve(__dirname, 'localhost-key.pem')),
-      cert: readFileSync(resolve(__dirname, 'localhost-cert.pem')),
-    },
-    host: '0.0.0.0', // برای دسترسی از IP محلی مثل 172.25.208.1
-  },
-})
+});
