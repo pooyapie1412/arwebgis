@@ -164,6 +164,7 @@ const CesiumMap = () => {
       fullscreenButton
       vrButton
       animation={false}
+      contextOptions={{ requestWebgl2: true }}
     >
       <CesiumContent />
     </Viewer>
