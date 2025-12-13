@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 
 const Sidebar = () => {
   const [open, setOpen] = useState(true);
+  const [monoVRActive, setMonoVRActive] = useState(false);
   const handleLoadTileset = () => {
     if (typeof window.loadCityGMLTileset === 'function') {
       window.loadCityGMLTileset();
@@ -14,21 +15,36 @@ const Sidebar = () => {
 
 
   return (
-    <div className={`sidebar hidden bg-gray-800 text-white  p-4 transition-all duration-300 ${open ? 'w-64' : 'w-16'} z-[1000]`}>
-      <button
+    <div className={`sidebar bg-gray-800 text-white  p-4 transition-all duration-300 ${open ? 'w-64' : 'w-16'} z-[1000]`}>
+      {/* <button
         className="bg-blue-600 text-white p-2 rounded mb-4 w-full hover:bg-blue-700 z-[1000]"
         onClick={() => setOpen(!open)}
       >
         {open ? 'بستن' : 'باز کردن'}
-      </button>
+      </button> */}
       {open && (
         <>
           {/* دکمه بارگذاری B3DM */}
-          <button
+          {/* <button
             className="bg-green-600 p-2 rounded mb-2 w-full hover:bg-green-700 text-sm"
             onClick={handleLoadTileset}
           >
             بارگذاری CityGML
+          </button> */}
+          <button
+            className="bg-purple-600 p-2 rounded mb-2 w-full hover:bg-purple-700 text-sm"
+            onClick={() => {
+              const next = !monoVRActive;
+              setMonoVRActive(next);
+              if (typeof window.setMonoVRActive === 'function') {
+                window.setMonoVRActive(next);
+              } else if (window.CESIUM_VIEWER) {
+                // fallback (قدیمی): فقط flag در viewer ثبت می‌کنیم
+                window.CESIUM_VIEWER.monoVRActive = next;
+              }
+            }}
+          >
+            {monoVRActive ? 'خاموش کردن Mono VR' : 'روشن کردن Mono VR'}
           </button>
         </>
       )}

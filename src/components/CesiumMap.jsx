@@ -1,5 +1,5 @@
-import { Viewer, Model, useCesium } from "resium";
-import { useEffect } from "react";
+import { Viewer, Model, useCesium, Cesium3DTileset } from "resium";
+import { useEffect, useState } from "react";
 import { Cartesian3, Math as CesiumMath, HeadingPitchRoll, HeadingPitchRange, Transforms,HeightReference, ScreenSpaceEventType, ScreenSpaceEventHandler, Color, Cesium3DTileFeature  } from "cesium";
 import WebXRPolyfill from "webxr-polyfill";
 import { Ion } from "cesium";
@@ -12,6 +12,7 @@ Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI3NGQ4M
 
 const CesiumContent = () => {
   const { viewer } = useCesium();
+  const [monoVRActive, setMonoVRActive] = useState(false);
 
   useEffect(() => {
     if (viewer) {
@@ -29,12 +30,124 @@ const CesiumContent = () => {
         vrButton.viewModel.isVRButtonVisible = true; // forc visible
         vrButton.viewModel.isVREnabled = true; // اگر لازم
       }
+      window.setMonoVRActive = (val) => {
+      try {
+        // اگر component هنوز لود است، این تابع setState محلی را فراخوانی می‌کند
+        // ما از یک custom event استفاده می‌کنیم تا مطمئن شویم setMonoVRActive در scope درست صدا زده می‌شود
+        window.dispatchEvent(new CustomEvent('cesium-set-mono-vr', { detail: { value: !!val } }));
+      } catch (e) { console.warn(e); }
+      };
     }
   }, [viewer]);
+
+  
+
+//   useEffect(() => {
+//   if (!viewer || !monoVRActive) return;
+
+//   const handler = new ScreenSpaceEventHandler(viewer.scene.canvas);
+//   let lastMouseX = null;
+//   let lastMouseY = null;
+
+//   // هندلر برای mouse move (شبیه‌سازی چرخش سر)
+//   handler.setInputAction((movement) => {
+//     if (!lastMouseX || !lastMouseY) {
+//       lastMouseX = movement.endPosition.x;
+//       lastMouseY = movement.endPosition.y;
+//       return;
+//     }
+
+//     const deltaX = movement.endPosition.x - lastMouseX;
+//     const deltaY = movement.endPosition.y - lastMouseY;
+
+//     // چرخش دوربین بر اساس delta (heading و pitch)
+//     viewer.camera.twistRight(CesiumMath.toRadians(deltaX * 0.1)); // heading (چرخش افقی)
+//     viewer.camera.lookDown(CesiumMath.toRadians(deltaY * 0.1)); // pitch (چرخش عمودی)
+
+//     lastMouseX = movement.endPosition.x;
+//     lastMouseY = movement.endPosition.y;
+//   }, ScreenSpaceEventType.MOUSE_MOVE);
+
+//   // تمیز کردن handler وقتی mode خاموش شد
+//   return () => {
+//     handler.destroy();
+//   };
+// }, [viewer, monoVRActive]);
+
+useEffect(() => {
+  if (!viewer || !monoVRActive) return;
+
+  let prevHeading = 0;
+  let prevPitch = 0;
+  let prevRoll = 0;
+  const smoothingFactor = 0.2; // برای روان کردن چرخش (0-1)
+
+  const handleDeviceOrientation = (event) => {
+    if (!monoVRActive) return;
+
+    const alpha = event.alpha || 0; // heading (0-360)
+    const beta = event.beta || 0;   // pitch (-180 to 180)
+    const gamma = event.gamma || 0; // roll (-90 to 90)
+
+    // تنظیم برای VR-like: beta را از حالت "از افق" به "نگاه مستقیم" تبدیل کن
+    let heading = CesiumMath.toRadians(alpha);
+    let pitch = CesiumMath.toRadians(beta - 90);
+    let roll = CesiumMath.toRadians(gamma);
+
+    // Smoothing برای جلوگیری از jitter
+    heading = prevHeading + smoothingFactor * (heading - prevHeading);
+    pitch = prevPitch + smoothingFactor * (pitch - prevPitch);
+    roll = prevRoll + smoothingFactor * (roll - prevRoll);
+
+    prevHeading = heading;
+    prevPitch = pitch;
+    prevRoll = roll;
+
+    viewer.camera.setView({
+      orientation: new HeadingPitchRoll(heading, pitch, roll),
+    });
+  };
+
+  window.addEventListener('deviceorientation', handleDeviceOrientation);
+
+  return () => {
+    window.removeEventListener('deviceorientation', handleDeviceOrientation);
+  };
+}, [viewer, monoVRActive]);
+
+useEffect(() => {
+  const onSetMono = (e) => {
+    setMonoVRActive(!!(e && e.detail && e.detail.value));
+  };
+  window.addEventListener('cesium-set-mono-vr', onSetMono);
+  return () => window.removeEventListener('cesium-set-mono-vr', onSetMono);
+}, []);
+
+  useEffect(() => {
+  if (!viewer) return;
+  if (navigator.xr && navigator.xr.isSessionSupported) {
+    navigator.xr.isSessionSupported('immersive-vr').then(supported => {
+      console.log('WebXR immersive-vr supported:', supported);
+      if (!supported) {
+        console.warn('No immersive-vr support — result may be split-screen fallback.');
+      } else {
+        // force enable VR button to try native flow
+        const vm = viewer.vrButton?.viewModel;
+        if (vm) {
+          vm.isVRButtonVisible = true;
+          vm.isVREnabled = true;
+        }
+      }
+    }).catch(err => console.error('isSessionSupported error', err));
+  } else {
+    console.warn('navigator.xr not available — WebXR unsupported or polyfilled.');
+  }
+}, [viewer]);
+
   
 
   useEffect(() => {
-    new WebXRPolyfill();
+    // new WebXRPolyfill();
 
     // Load Eruda فقط روی موبایل
     if (/Mobi|Android|iPhone/i.test(navigator.userAgent)) {
@@ -106,6 +219,7 @@ const CesiumContent = () => {
         duration: 2.5
       });
     }
+    
 
     if (typeof DeviceOrientationEvent?.requestPermission === 'function') {
       DeviceOrientationEvent?.requestPermission()
@@ -135,15 +249,106 @@ const CesiumContent = () => {
     }
   };
 
+  window.addEventListener('deviceorientation', (event) => {
+  if (!monoVRActive) return;
+  const heading = CesiumMath.toRadians(event.alpha || 0);
+  const pitch = CesiumMath.toRadians(event.beta - 90 || 0); // تنظیم برای VR-like
+  viewer.camera.setView({
+    orientation: new HeadingPitchRoll(heading, pitch, 0),
+  });
+});
+
+  const handleTilesetReady = (tileset) => {
+    console.log('tileset ready', tileset);
+    if (!viewer || viewer.isDestroyed()) return;
+    const boundingSphere = tileset.boundingSphere;
+    if (boundingSphere && boundingSphere.radius > 10) {
+      viewer.camera.flyToBoundingSphere(boundingSphere, {
+        duration: 2.5,
+        offset: new HeadingPitchRange(0, CesiumMath.toRadians(-45), boundingSphere.radius * 3),  // range بیشتر برای دید بهتر
+      });
+    } else {
+      viewer.camera.flyTo({
+        destination: Cartesian3.fromDegrees(centerLon, centerLat, 1000 + centerH),  // +centerH برای جلوگیری از clipping
+        orientation: {
+          heading: CesiumMath.toRadians(0),
+          pitch: CesiumMath.toRadians(-45),
+          roll: 0
+        },
+        duration: 2.5
+      });
+    }
+
+    if (typeof DeviceOrientationEvent?.requestPermission === 'function') {
+      DeviceOrientationEvent?.requestPermission()
+        .then(permissionState => {
+          console.log('Motion permission:', permissionState);
+          if (permissionState === 'granted') {
+            // forc visible کردن دکمه VR اگر مجوز OK باشه
+            if (viewer.vrButton) {
+              const vm = viewer.vrButton.viewModel;
+              vm.isVRButtonVisible = true;
+              vm.isVREnabled = true;
+              console.log('VR button forced visible');
+            }
+          } else {
+            console.error('Motion permission denied');
+          }
+        })
+        .catch(err => console.error('Permission error:', err));
+    } else {
+      console.log('No permission request needed - assuming granted');
+      // forc visible اگر مجوز لازم نباشه
+      if (viewer.vrButton) {
+        const vm = viewer.vrButton.viewModel;
+        vm.isVRButtonVisible = true;
+        vm.isVREnabled = true;
+      }
+    }
+  };
+
+  // لیست فولدرهای جداگانه (نام فولدرها را بر اساس ساختار پروژه خود جایگزین کنید، مثلاً Door, WallSurface, etc.)
+  // فرض کنیم فولدرها در مسیر '/assets/Cesium3DTiles/Building_3DTiles_LOD3_7_FeatureTypes/' قرار دارند (در public/assets)
+  // و هر کدام یک tileset.json دارند.
+  // همچنین برای فولدر دوم Building_3DTiles، اگر ساختار مشابهی دارد، می‌توانید به لیست اضافه کنید.
+  const tilesetFolders = [
+    'Door',
+    // 'WallSurface',
+    // 'Building',
+    // 'BuildingInstallation',
+    // 'CeilingSurface',
+    // 'CityModel',
+    // 'RoofSurface',
+    // 'Window'
+  ];
+  
+
+  const basePath = '/assets/Cesium3DTiles/Building_3DTiles_LOD3_7_FeatureTypes/'; // حالا از public شروع می‌شه (URL مطلق)
+
   return (
-    <Model
-        url={modelUrl}
-        modelMatrix={modelMatrix}
-        scale={1.0}
-        show={true}
-        onReady={handleModelReady}
-        onError={(e) => console.error("❌ Model error:", e)}
-    />
+    <>
+      {/* کامنت مدل glTF قبلی */}
+      <Model
+          url={modelUrl}
+          modelMatrix={modelMatrix}
+          scale={1.0}
+          show={true}
+          onReady={handleModelReady}
+          onError={(e) => console.error("❌ Model error:", e)}
+      />
+
+      {/* لود هر tileset جداگانه */}
+      {/* {tilesetFolders.map((folder, index) => (
+        <Cesium3DTileset
+          key={folder}
+          url={`${basePath}${folder}/tileset.json`} // مسیر به tileset.json هر فولدر (از public)
+          show={true}
+          // فقط برای آخرین tileset، handleReady را فراخوانی کنید تا زوم روی آخرین bounding sphere انجام شود (یا می‌توانید برای هر کدام جداگانه مدیریت کنید)
+          onReady={index === tilesetFolders.length - 1 ? handleTilesetReady : undefined}
+          onError={(e) => console.error(`❌ Tileset error for ${folder}:`, e)}
+        />
+      ))} */}
+    </>
   );
 };
 
