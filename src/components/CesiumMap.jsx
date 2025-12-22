@@ -1,11 +1,16 @@
-// Cesium XR Final – Mono (Mobile) + Stereo (HTC Vive XR Elite)
-// Assumptions:
-// - HTTPS enabled
-// - Vive Browser or compatible WebXR browser
-// - Mono VR ONLY for mobile
+// Cesium XR – FINAL SAFE VERSION
+// - True Stereo VR (Vive / Quest / Pico)
+// - Mono orientation ONLY for mobile (non-XR)
+// - NO camera manipulation in XR
+
 import { Viewer, Model, useCesium } from "resium";
 import { useEffect, useState } from "react";
-import { Cartesian3, HeadingPitchRoll, Math as CesiumMath, Transforms } from "cesium";
+import {
+  Cartesian3,
+  HeadingPitchRoll,
+  Math as CesiumMath,
+  Transforms,
+} from "cesium";
 import WebXRPolyfill from "webxr-polyfill";
 import modelUrl from "../assets/output_fixed.gltf";
 
@@ -13,31 +18,42 @@ const CesiumContent = () => {
   const { viewer } = useCesium();
   const [isXRDevice, setIsXRDevice] = useState(false);
 
-  // Detect XR headset (VIVE, Quest, etc.) with immersive-vr support
+  // ===== Detect XR headset =====
   useEffect(() => {
-    async function checkXRSupport() {
-      if (navigator.xr) {
-        try {
-          const supported = await navigator.xr.isSessionSupported('immersive-vr');
-          const ua = navigator.userAgent || "";
-          setIsXRDevice(supported && /VIVE|Quest|XR/i.test(ua));
-        } catch (error) {
-          console.error("XR support check failed:", error);
-        }
+    async function detectXR() {
+      if (!navigator.xr) return;
+      try {
+        const supported = await navigator.xr.isSessionSupported("immersive-vr");
+        const ua = navigator.userAgent || "";
+        setIsXRDevice(supported && /Quest|VIVE|XR|Pico/i.test(ua));
+      } catch (e) {
+        console.error("XR detection failed", e);
       }
     }
-    checkXRSupport();
+    detectXR();
   }, []);
 
-  // Disable ALL mono / orientation logic on XR devices
+  // ===== Initial camera positioning (NON-XR ONLY) =====
   useEffect(() => {
-    if (!viewer || !isXRDevice) return;
-    // Important: DO NOT touch camera in XR – Cesium handles it automatically
+    if (!viewer) return;
+    if (isXRDevice) return; // 🚫 NEVER touch camera in XR
+
+    viewer.camera.flyTo({
+      destination: Cartesian3.fromDegrees(49.57840487, 37.294837457, 1200),
+      orientation: {
+        heading: 0,
+        pitch: CesiumMath.toRadians(-45),
+        roll: 0,
+      },
+      duration: 2.0,
+    });
   }, [viewer, isXRDevice]);
 
-  // Mobile-only mono VR using deviceorientation
+  // ===== Mobile mono orientation (NON-XR ONLY) =====
   useEffect(() => {
-    if (!viewer || isXRDevice) return;
+    if (!viewer) return;
+    if (isXRDevice) return;
+
     const handler = (event) => {
       const heading = CesiumMath.toRadians(event.alpha || 0);
       const pitch = CesiumMath.toRadians((event.beta || 0) - 90);
@@ -45,42 +61,23 @@ const CesiumContent = () => {
         orientation: new HeadingPitchRoll(heading, pitch, 0),
       });
     };
+
     window.addEventListener("deviceorientation", handler);
     return () => window.removeEventListener("deviceorientation", handler);
   }, [viewer, isXRDevice]);
 
-  // ===== handleModelReady (from original code, corrected) =====
+  // ===== Model placement =====
   const centerLon = 49.57840487;
   const centerLat = 37.294837457;
-  const centerH = 1.81571149360388;
-  const handleModelReady = (model) => {
-    if (!viewer || viewer.isDestroyed()) return;
-    const boundingSphere = model.boundingSphere;
-    if (boundingSphere && boundingSphere.radius > 10) {
-      viewer.camera.flyToBoundingSphere(boundingSphere, {
-        duration: 2.5,
-        offset: new Cesium.HeadingPitchRange(
-          0,
-          CesiumMath.toRadians(-45),
-          boundingSphere.radius * 3
-        ),
-      });
-    } else {
-      viewer.camera.flyTo({
-        destination: Cartesian3.fromDegrees(centerLon, centerLat, 1000 + centerH),
-        orientation: {
-          heading: CesiumMath.toRadians(0),
-          pitch: CesiumMath.toRadians(-45),
-          roll: 0,
-        },
-        duration: 2.5,
-      });
-    }
-  };
+  const centerH = 1.8157;
 
-  // Model placement
   const position = Cartesian3.fromDegrees(centerLon, centerLat, centerH);
-  const hpr = new HeadingPitchRoll(CesiumMath.toRadians(90), CesiumMath.toRadians(90), 0);
+  const hpr = new HeadingPitchRoll(
+    CesiumMath.toRadians(90),
+    CesiumMath.toRadians(90),
+    0
+  );
+
   const modelMatrix = Transforms.headingPitchRollToFixedFrame(position, hpr);
 
   return (
@@ -88,8 +85,7 @@ const CesiumContent = () => {
       url={modelUrl}
       modelMatrix={modelMatrix}
       scale={1.0}
-      show={true}
-      onReady={handleModelReady}
+      show
     />
   );
 };
