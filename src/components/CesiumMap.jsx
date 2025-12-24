@@ -1,10 +1,5 @@
-// Cesium XR – FINAL SAFE VERSION
-// - True Stereo VR (Vive / Quest / Pico)
-// - Mono orientation ONLY for mobile (non-XR)
-// - NO camera manipulation in XR
-
 import { Viewer, Model, useCesium } from "resium";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import {
   Cartesian3,
   HeadingPitchRoll,
@@ -14,32 +9,29 @@ import {
 import WebXRPolyfill from "webxr-polyfill";
 import modelUrl from "../assets/output_fixed.gltf";
 
+/* =========================
+   Cesium Scene Content
+========================= */
 const CesiumContent = () => {
   const { viewer } = useCesium();
-  const [isXRDevice, setIsXRDevice] = useState(false);
 
-  // ===== Detect XR headset =====
-  useEffect(() => {
-    async function detectXR() {
-      if (!navigator.xr) return;
-      try {
-        const supported = await navigator.xr.isSessionSupported("immersive-vr");
-        const ua = navigator.userAgent || "";
-        setIsXRDevice(supported && /Quest|VIVE|XR|Pico/i.test(ua));
-      } catch (e) {
-        console.error("XR detection failed", e);
-      }
-    }
-    detectXR();
-  }, []);
+  // ===== ONLY valid XR state =====
+  const isXRActive =
+    viewer?.scene?.xr?.enabled === true;
 
-  // ===== Initial camera positioning (NON-XR ONLY) =====
+  /* =========================
+     Initial camera (NON-XR ONLY)
+  ========================= */
   useEffect(() => {
     if (!viewer) return;
-    if (isXRDevice) return; // 🚫 NEVER touch camera in XR
+    if (isXRActive) return;
 
     viewer.camera.flyTo({
-      destination: Cartesian3.fromDegrees(49.57840487, 37.294837457, 1200),
+      destination: Cartesian3.fromDegrees(
+        49.57840487,
+        37.294837457,
+        1200
+      ),
       orientation: {
         heading: 0,
         pitch: CesiumMath.toRadians(-45),
@@ -47,38 +39,47 @@ const CesiumContent = () => {
       },
       duration: 2.0,
     });
-  }, [viewer, isXRDevice]);
+  }, [viewer, isXRActive]);
 
-  // ===== Mobile mono orientation (NON-XR ONLY) =====
+  /* =========================
+     Mobile mono orientation
+     (STRICTLY NON-XR)
+  ========================= */
   useEffect(() => {
     if (!viewer) return;
-    if (isXRDevice) return;
+    if (isXRActive) return;
 
     const handler = (event) => {
-      const heading = CesiumMath.toRadians(event.alpha || 0);
-      const pitch = CesiumMath.toRadians((event.beta || 0) - 90);
       viewer.camera.setView({
-        orientation: new HeadingPitchRoll(heading, pitch, 0),
+        orientation: new HeadingPitchRoll(
+          CesiumMath.toRadians(event.alpha || 0),
+          CesiumMath.toRadians((event.beta || 0) - 90),
+          0
+        ),
       });
     };
 
     window.addEventListener("deviceorientation", handler);
-    return () => window.removeEventListener("deviceorientation", handler);
-  }, [viewer, isXRDevice]);
+    return () =>
+      window.removeEventListener("deviceorientation", handler);
+  }, [viewer, isXRActive]);
 
-  // ===== Model placement =====
-  const centerLon = 49.57840487;
-  const centerLat = 37.294837457;
-  const centerH = 1.8157;
-
-  const position = Cartesian3.fromDegrees(centerLon, centerLat, centerH);
-  const hpr = new HeadingPitchRoll(
-    CesiumMath.toRadians(90),
-    CesiumMath.toRadians(90),
-    0
+  /* =========================
+     Model placement ONLY
+     (Never touch camera)
+  ========================= */
+  const modelMatrix = Transforms.headingPitchRollToFixedFrame(
+    Cartesian3.fromDegrees(
+      49.57840487,
+      37.294837457,
+      1.8157
+    ),
+    new HeadingPitchRoll(
+      CesiumMath.toRadians(90),
+      CesiumMath.toRadians(90),
+      0
+    )
   );
-
-  const modelMatrix = Transforms.headingPitchRollToFixedFrame(position, hpr);
 
   return (
     <Model
@@ -90,9 +91,18 @@ const CesiumContent = () => {
   );
 };
 
+/* =========================
+   Cesium Viewer Wrapper
+========================= */
 const CesiumMap = () => {
   useEffect(() => {
-    new WebXRPolyfill();
+    // Polyfill ONLY if native WebXR is missing
+    if (
+      typeof navigator !== "undefined" &&
+      !("xr" in navigator)
+    ) {
+      new WebXRPolyfill();
+    }
   }, []);
 
   return (
@@ -102,7 +112,10 @@ const CesiumMap = () => {
       animation={false}
       timeline={false}
       navigationHelpButton={false}
-      contextOptions={{ requestWebgl2: true }}
+      contextOptions={{
+        requestWebgl2: true,
+        alpha: false,
+      }}
     >
       <CesiumContent />
     </Viewer>
